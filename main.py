@@ -4,6 +4,10 @@ import os
 import psutil
 import time
 import threading
+import re
+import requests
+
+API_URL = "http://ip-api.com/json/?fields=country"  # API untuk geolokasi berdasarkan IP pada access logs
 
 CHAT_ID = "1061302127"  # Ganti sama chat id tele kalian
 TOKEN = "8170415782:AAGSWU5EwE1cdXHJO6LBVIqvHU9TNMoIPJk" # Ganti sama token kalian
@@ -215,18 +219,41 @@ def send_message_to_telegram(message):
 @bot.message_handler(commands=['access_logs'])
 def access_logs(message):
     try:
-        # Membaca 10 baris terakhir dari file access.log
         with open(ACCESS_LOG_PATH, 'r') as log_file:
             logs = log_file.readlines()[-10:]  # Ambil 10 baris terakhir
+        
+        if not logs:
+            bot.reply_to(message, "📂 Tidak ada log akses terbaru.")
+            return
 
-        # Jika ada log, kirimkan ke pengguna
-        if logs:
-            bot.send_message(message.chat.id, ''.join(logs))
+        formatted_logs = []
+        for log in logs:
+            match = re.search(r'(\d+\.\d+\.\d+\.\d+) - - \[(.*?)\] "(.*?)" (\d+) (\d+) "(.*?)" "(.*?)"', log)
+            if match:
+                ip, timestamp, request, status, size, referer, user_agent = match.groups()
+
+                # Dapatkan lokasi negara dari API geolokasi
+                try:
+                    response = requests.get(f"{API_URL}{ip}")
+                    geo_data = response.json()
+                    country = geo_data.get('country', 'Unknown')
+                except Exception as e:
+                    country = "Unknown"
+
+                formatted_logs.append(
+                    f"📍 IP: {ip} ({country})\n"
+                    f"⏰ Time: {timestamp}\n"
+                    f"📄 Request: {request}\n"
+                    f"🔗 Referer: {referer}\n"
+                    f"---------------------------------"
+                )
+
+        if formatted_logs:
+            bot.send_message(message.chat.id, '\n'.join(formatted_logs))
         else:
-            bot.send_message(message.chat.id, 'Log akses kosong atau tidak ada aktivitas terbaru.')
-
+            bot.reply_to(message, "⚠ Tidak ada log akses dengan format yang sesuai.")
     except Exception as e:
-        bot.send_message(message.chat.id, f'Error saat membaca log akses: {e}')
+        bot.reply_to(message, f'Error saat membaca log: {e}')
 
 # Perintah /uptime
 @bot.message_handler(commands=['uptime'])
