@@ -233,12 +233,16 @@ def access_logs(message):
                 ip, timestamp, request, status, size, referer, user_agent = match.groups()
 
                 # Dapatkan lokasi negara dari API geolokasi
-                try:
+            try:
+                if ip.startswith("192.168.") or ip.startswith("10.") or ip == "127.0.0.1":
+                    country = "Private Network"
+                else:
                     response = requests.get(f"{API_URL}{ip}")
                     geo_data = response.json()
                     country = geo_data.get('country', 'Unknown')
-                except Exception as e:
-                    country = "Unknown"
+            except Exception as e:
+                print(f"Error fetching geolocation for {ip}: {e}")
+                country = "Unknown"
 
                 formatted_logs.append(
                     f"📍 IP: {ip} ({country})\n"
