@@ -354,7 +354,7 @@ def toggle_vhost(message):
 def add_vhost(message):
     bot.reply_to(message, "Silakan masukkan detail Virtual Host dalam format berikut:\n\n`domain root_path`\n\nContoh:\n`app1 /var/www/app1`", parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: len(message.text.split()) == 2 and message.text.split()[0].endswith(".com"))
+@bot.message_handler(func=lambda message: len(message.text.split()) == 2)
 def process_add_vhost(message):
     try:
         # Ambil domain dan root_path dari input user
