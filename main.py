@@ -150,7 +150,7 @@ def monitor_resources():
             bot.send_message(CHAT_ID, f"⚠ SAFE! RAM usage is normal: {ram_usage}%")
             status_ram = False
 
-        time.sleep(10)
+        time.sleep(60)
 
 @bot.message_handler(commands=['start'])
 def start_command(message):
@@ -187,6 +187,7 @@ def help_command(message):
 /enable_vhost - Akftikan Virtual host
 /disable_vhost - Menonaftikan Virtual host
 /add_vhost - Menambahkan Virtual Host
+/remove_vhost - Menghapuskan Virtual Host
 
 ⚠ Pastikan bot memiliki izin sudo untuk kontrol Nginx.
 """
@@ -306,81 +307,91 @@ def virtual_hosts(message):
 # Enable Virtual Host
 @bot.message_handler(commands=['enable_vhost'])
 def enable_vhost(message):
-    bot.reply_to(message, "Silakan masukkan nama domain (syntax: enable app1.example.com) yang ingin diaktifkan:")
+    try:
+        bot.reply_to(message, "Silakan masukkan nama Virtual Host yang ingin diaktifkan (misalnya: `app1`):")
+        bot.register_next_step_handler(message, process_enable_vhost)  # Lanjut ke fungsi proses
+    except Exception as e:
+        bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}")
+
+def process_enable_vhost(message):
+    try:
+        domain = message.text.strip()  # Ambil nama Virtual Host dari input user
+        available_path = f"/etc/nginx/sites-available/{domain}"
+        enabled_path = f"/etc/nginx/sites-enabled/{domain}"
+
+        if not os.path.exists(enabled_path):  # Jika belum diaktifkan
+            if os.path.exists(available_path):  # Pastikan file ada di sites-available
+                os.symlink(available_path, enabled_path)  # Buat symlink
+                os.system("sudo systemctl reload nginx")  # Reload Nginx
+                bot.reply_to(message, f"✅ Virtual Host `{domain}` berhasil diaktifkan!")
+            else:
+                bot.reply_to(message, f"⚠ Konfigurasi Virtual Host `{domain}` tidak ditemukan di `/etc/nginx/sites-available/`.")
+        else:
+            bot.reply_to(message, f"⚠ Virtual Host `{domain}` sudah aktif.")
+    except Exception as e:
+        bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}")
 
 # Disable Virtual Host
 @bot.message_handler(commands=['disable_vhost'])
 def disable_vhost(message):
-    bot.reply_to(message, "Silakan masukkan nama domain yang ingin dinonaktifkan (syntax: disable app2.example.com):")
-
-# Fungsi untuk memproses perintah enable/disable Virtual Host
-@bot.message_handler(func=lambda message: message.text.startswith("disable ") or message.text.startswith("enable "))
-def toggle_vhost(message):
     try:
-        # Ambil perintah dan domain dari pesan
-        parts = message.text.split(" ", 1)
-        if len(parts) != 2:
-            bot.reply_to(message, "⚠ Format tidak sesuai. Gunakan: `enable <domain>` atau `disable <domain>`", parse_mode="Markdown")
-            return
+        bot.reply_to(message, "Silakan masukkan nama Virtual Host yang ingin dinonaktifkan (misalnya: `app2`):")
+        bot.register_next_step_handler(message, process_disable_vhost)  # Lanjut ke fungsi proses
+    except Exception as e:
+        bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}")
 
-        command, domain = parts
-        domain = domain.strip()
+def process_disable_vhost(message):
+    try:
+        domain = message.text.strip()  # Ambil nama Virtual Host dari input user
         available_path = f"/etc/nginx/sites-available/{domain}"
         enabled_path = f"/etc/nginx/sites-enabled/{domain}"
 
-        if command == "enable":
-            # Aktifkan Virtual Host
-            if not os.path.exists(enabled_path):  # Jika belum diaktifkan
-                if os.path.exists(available_path):  # Pastikan file ada di sites-available
-                    try:
-                        subprocess.run(["sudo", "ln", "-s", available_path, enabled_path], check=True)
-                        subprocess.run(["sudo", "systemctl", "reload", "nginx"], check=True)
-                        bot.reply_to(message, f"✅ Virtual Host `{domain}` berhasil diaktifkan!")
-                    except subprocess.CalledProcessError as e:
-                        bot.reply_to(message, f"⚠ Gagal mengaktifkan Virtual Host `{domain}`: {e}")
-                else:
-                    bot.reply_to(message, f"⚠ Konfigurasi Virtual Host `{domain}` tidak ditemukan di `/etc/nginx/sites-available/`.")
-            else:
-                bot.reply_to(message, f"⚠ Virtual Host `{domain}` sudah aktif.")
-
-        elif command == "disable":
-            # Nonaktifkan Virtual Host
-            if os.path.exists(enabled_path):  # Jika symlink ada
-                try:
-                    subprocess.run(["sudo", "rm", enabled_path], check=True)
-                    subprocess.run(["sudo", "systemctl", "reload", "nginx"], check=True)
-                    bot.reply_to(message, f"✅ Virtual Host `{domain}` berhasil dinonaktifkan!")
-                except subprocess.CalledProcessError as e:
-                    bot.reply_to(message, f"⚠ Gagal menonaktifkan Virtual Host `{domain}`: {e}")
-            else:
-                bot.reply_to(message, f"⚠ Virtual Host `{domain}` sudah tidak aktif.")
+        if os.path.exists(enabled_path):  # Jika symlink ada
+            os.unlink(enabled_path)  # Hapus symlink
+            os.system("sudo systemctl reload nginx")  # Reload Nginx
+            bot.reply_to(message, f"✅ Virtual Host `{domain}` berhasil dinonaktifkan!")
         else:
-            bot.reply_to(message, "⚠ Perintah tidak dikenali. Gunakan `enable <domain>` atau `disable <domain>`.", parse_mode="Markdown")
+            bot.reply_to(message, f"⚠ Virtual Host `{domain}` sudah tidak aktif.")
     except Exception as e:
-        bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}") 
+        bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}")
+ 
 
-# Menambahkan vritual ke siteavailable
+# Menambahkan Virtual Host ke site-available
 @bot.message_handler(commands=['add_vhost'])
 def add_vhost(message):
-    bot.reply_to(message, "Silakan masukkan detail Virtual Host dalam format berikut:\n\n`domain root_path`\n\nContoh:\n`app1 /var/www/app1`", parse_mode="Markdown")
+    try:
+        bot.reply_to(message, "Silakan masukkan subdomain yang ingin ditambahkan (contoh: `app1`):", parse_mode="Markdown")
+        bot.register_next_step_handler(message, process_add_vhost)  # Lanjut ke proses penambahan
+    except Exception as e:
+        bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}")
 
-@bot.message_handler(func=lambda message: len(message.text.split()) == 2)
 def process_add_vhost(message):
     try:
-        # Ambil domain dan root_path dari input user
-        domain, root_path = message.text.split()
+        # Ambil subdomain dari input user
+        domain = message.text.strip()
+        if not domain.isalnum():
+            bot.reply_to(message, "⚠ Subdomain hanya boleh mengandung huruf dan angka (tanpa spasi atau simbol).")
+            return
+
         available_path = f"/etc/nginx/sites-available/{domain}"
+        root_path = f"/var/www/{domain}"
 
         # Periksa apakah file Virtual Host sudah ada
         if os.path.exists(available_path):
             bot.reply_to(message, f"⚠ Virtual Host `{domain}` sudah ada.")
             return
 
+        # Periksa apakah direktori root ada
+        if not os.path.exists(root_path):
+            os.makedirs(root_path, exist_ok=True)  # Buat direktori root jika belum ada
+            with open(f"{root_path}/index.html", "w") as index_file:
+                index_file.write(f"<h1>Welcome to {domain}.example.com</h1>")  # Buat file index default
+
         # Template konfigurasi Nginx untuk Virtual Host
         config_content = f"""
 server {{
     listen 80;
-    server_name {domain};
+    server_name {domain}.example.com;
 
     root {root_path};
     index index.html;
@@ -395,12 +406,55 @@ server {{
             config_file.write(config_content)
 
         bot.reply_to(message, f"✅ File konfigurasi untuk Virtual Host `{domain}` berhasil dibuat di `/etc/nginx/sites-available/`.")
+        bot.reply_to(message, f"Apakah Anda ingin mengaktifkan Virtual Host `{domain}` sekarang? Gunakan perintah: `enable_vhost`.", parse_mode="Markdown")
 
-        # Tanyakan apakah user ingin mengaktifkan Virtual Host
-        bot.reply_to(message, f"Apakah Anda ingin mengaktifkan Virtual Host `{domain}` sekarang? Balas dengan `enable {domain}` jika ya.")
     except Exception as e:
         bot.reply_to(message, f"⚠ Terjadi kesalahan saat menambahkan Virtual Host: {e}")
 
+
+# Hapus Virtual Host
+@bot.message_handler(commands=['remove_vhost'])
+def remove_vhost(message):
+    try:
+        bot.reply_to(message, "Silakan masukkan nama Virtual Host yang ingin dihapus (misalnya: `app1`):", parse_mode="Markdown")
+        bot.register_next_step_handler(message, process_remove_vhost)  # Lanjutkan ke proses penghapusan
+    except Exception as e:
+        bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}")
+
+def process_remove_vhost(message):
+    try:
+        # Ambil nama Virtual Host dari input user
+        vhost_name = message.text.strip()
+        if not vhost_name.isalnum():
+            bot.reply_to(message, "⚠ Nama Virtual Host hanya boleh mengandung huruf dan angka.")
+            return
+
+        available_path = f"/etc/nginx/sites-available/{vhost_name}"
+        enabled_path = f"/etc/nginx/sites-enabled/{vhost_name}"
+
+        # Cek apakah file Virtual Host tersedia
+        if not os.path.exists(available_path):
+            bot.reply_to(message, f"⚠ File Virtual Host `{vhost_name}` tidak ditemukan di `/etc/nginx/sites-available/`.")
+            return
+
+        # Jika Virtual Host aktif, hapus symlink dari sites-enabled
+        if os.path.exists(enabled_path):
+            os.unlink(enabled_path)
+            bot.reply_to(message, f"🔗 Virtual Host `{vhost_name}` dinonaktifkan (symlink dihapus).")
+
+        # Hapus file konfigurasi di sites-available
+        os.remove(available_path)
+        bot.reply_to(message, f"✅ File konfigurasi Virtual Host `{vhost_name}` berhasil dihapus dari `/etc/nginx/sites-available/`.")
+
+        # Reload Nginx untuk menerapkan perubahan
+        result = os.system("sudo systemctl reload nginx")
+        if result == 0:
+            bot.reply_to(message, "🔄 Nginx berhasil direload untuk menerapkan perubahan.")
+        else:
+            bot.reply_to(message, "⚠ Gagal me-reload Nginx. Periksa konfigurasi Nginx secara manual.")
+
+    except Exception as e:
+        bot.reply_to(message, f"⚠ Terjadi kesalahan saat menghapus Virtual Host: {e}")
 
 
 
