@@ -6,6 +6,7 @@ import time
 import threading
 import re
 import requests
+import subprocess
 
 API_URL = "http://ip-api.com/json/?fields=country"  # API untuk geolokasi berdasarkan IP pada access logs
 
@@ -172,6 +173,9 @@ def help_command(message):
 /uptime - Menampilkan uptime server
 /response_time - Menampilkan response time server
 /access_logs - Menampilkan 10 baris terakhir dari log akses Nginx
+/list_virtual_hosts - Menampilkan Virtual Host
+/enable_vhost - Akftikan Virtual host
+/disable_vhost - Menonaftikan Virtual host
 
 ⚠ Pastikan bot memiliki izin sudo untuk kontrol Nginx.
 """
@@ -259,6 +263,93 @@ def access_logs(message):
             bot.reply_to(message, "⚠ Tidak ada log akses dengan format yang sesuai.")
     except Exception as e:
         bot.reply_to(message, f'Error saat membaca log: {e}')
+
+# view virtual host apa aja ada yang aktif
+@bot.message_handler(commands=['list_virtual_hosts'])
+def virtual_hosts(message):
+    try:
+        available_path = '/etc/nginx/sites-available/'
+        enabled_path = '/etc/nginx/sites-enabled/'
+
+        # Ambil daftar semua Virtual Hosts yang tersedia dan aktif
+        available_sites = set(os.listdir(available_path))
+        enabled_sites = set(os.listdir(enabled_path))
+
+        # Buat daftar dengan status aktif atau tidak aktif
+        status_list = []
+        for site in available_sites:
+            if site in enabled_sites:
+                status_list.append(f"✅ {site} (Aktif)")
+            else:
+                status_list.append(f"❌ {site} (Tidak Aktif)")
+
+        # Kirim daftar ke user
+        if status_list:
+            bot.reply_to(message, "📁 Daftar Virtual Hosts:\n" + '\n'.join(status_list))
+        else:
+            bot.reply_to(message, "📂 Tidak ada Virtual Hosts yang ditemukan.")
+    except Exception as e:
+        bot.reply_to(message, f"⚠ Error membaca Virtual Hosts: {e}")
+
+
+# Enable Virtual Host
+@bot.message_handler(commands=['enable_vhost'])
+def enable_vhost(message):
+    bot.reply_to(message, "Silakan masukkan nama domain (syntax: enable app1.example.com) yang ingin diaktifkan:")
+
+# Disable Virtual Host
+@bot.message_handler(commands=['disable_vhost'])
+def disable_vhost(message):
+    bot.reply_to(message, "Silakan masukkan nama domain yang ingin dinonaktifkan (syntax: disable app2.example.com):")
+
+# Fungsi untuk memproses perintah enable/disable Virtual Host
+@bot.message_handler(func=lambda message: message.text.startswith("disable ") or message.text.startswith("enable "))
+def toggle_vhost(message):
+    try:
+        # Ambil perintah dan domain dari pesan
+        parts = message.text.split(" ", 1)
+        if len(parts) != 2:
+            bot.reply_to(message, "⚠ Format tidak sesuai. Gunakan: `enable <domain>` atau `disable <domain>`", parse_mode="Markdown")
+            return
+
+        command, domain = parts
+        domain = domain.strip()
+        available_path = f"/etc/nginx/sites-available/{domain}"
+        enabled_path = f"/etc/nginx/sites-enabled/{domain}"
+
+        if command == "enable":
+            # Aktifkan Virtual Host
+            if not os.path.exists(enabled_path):  # Jika belum diaktifkan
+                if os.path.exists(available_path):  # Pastikan file ada di sites-available
+                    try:
+                        subprocess.run(["sudo", "ln", "-s", available_path, enabled_path], check=True)
+                        subprocess.run(["sudo", "systemctl", "reload", "nginx"], check=True)
+                        bot.reply_to(message, f"✅ Virtual Host `{domain}` berhasil diaktifkan!")
+                    except subprocess.CalledProcessError as e:
+                        bot.reply_to(message, f"⚠ Gagal mengaktifkan Virtual Host `{domain}`: {e}")
+                else:
+                    bot.reply_to(message, f"⚠ Konfigurasi Virtual Host `{domain}` tidak ditemukan di `/etc/nginx/sites-available/`.")
+            else:
+                bot.reply_to(message, f"⚠ Virtual Host `{domain}` sudah aktif.")
+
+        elif command == "disable":
+            # Nonaktifkan Virtual Host
+            if os.path.exists(enabled_path):  # Jika symlink ada
+                try:
+                    subprocess.run(["sudo", "rm", enabled_path], check=True)
+                    subprocess.run(["sudo", "systemctl", "reload", "nginx"], check=True)
+                    bot.reply_to(message, f"✅ Virtual Host `{domain}` berhasil dinonaktifkan!")
+                except subprocess.CalledProcessError as e:
+                    bot.reply_to(message, f"⚠ Gagal menonaktifkan Virtual Host `{domain}`: {e}")
+            else:
+                bot.reply_to(message, f"⚠ Virtual Host `{domain}` sudah tidak aktif.")
+        else:
+            bot.reply_to(message, "⚠ Perintah tidak dikenali. Gunakan `enable <domain>` atau `disable <domain>`.", parse_mode="Markdown")
+    except Exception as e:
+        bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}") 
+
+
+
 
 # Perintah /uptime
 @bot.message_handler(commands=['uptime'])
