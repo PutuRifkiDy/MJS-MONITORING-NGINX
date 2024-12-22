@@ -176,6 +176,7 @@ def help_command(message):
 /list_virtual_hosts - Menampilkan Virtual Host
 /enable_vhost - Akftikan Virtual host
 /disable_vhost - Menonaftikan Virtual host
+/add_vhost - Menambahkan Virtual Host
 
 ⚠ Pastikan bot memiliki izin sudo untuk kontrol Nginx.
 """
@@ -347,6 +348,48 @@ def toggle_vhost(message):
             bot.reply_to(message, "⚠ Perintah tidak dikenali. Gunakan `enable <domain>` atau `disable <domain>`.", parse_mode="Markdown")
     except Exception as e:
         bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}") 
+
+# Menambahkan vritual ke siteavailable
+@bot.message_handler(commands=['add_vhost'])
+def add_vhost(message):
+    bot.reply_to(message, "Silakan masukkan detail Virtual Host dalam format berikut:\n\n`domain root_path`\n\nContoh:\n`app1 /var/www/app1`", parse_mode="Markdown")
+
+@bot.message_handler(func=lambda message: len(message.text.split()) == 2 and message.text.split()[0].endswith(".com"))
+def process_add_vhost(message):
+    try:
+        # Ambil domain dan root_path dari input user
+        domain, root_path = message.text.split()
+        available_path = f"/etc/nginx/sites-available/{domain}"
+
+        # Periksa apakah file Virtual Host sudah ada
+        if os.path.exists(available_path):
+            bot.reply_to(message, f"⚠ Virtual Host `{domain}` sudah ada.")
+            return
+
+        # Template konfigurasi Nginx untuk Virtual Host
+        config_content = f"""
+server {{
+    listen 80;
+    server_name {domain};
+
+    root {root_path};
+    index index.html;
+
+    location / {{
+        try_files $uri $uri/ =404;
+    }}
+}}
+"""
+        # Tulis file konfigurasi ke sites-available
+        with open(available_path, 'w') as config_file:
+            config_file.write(config_content)
+
+        bot.reply_to(message, f"✅ File konfigurasi untuk Virtual Host `{domain}` berhasil dibuat di `/etc/nginx/sites-available/`.")
+
+        # Tanyakan apakah user ingin mengaktifkan Virtual Host
+        bot.reply_to(message, f"Apakah Anda ingin mengaktifkan Virtual Host `{domain}` sekarang? Balas dengan `enable {domain}` jika ya.")
+    except Exception as e:
+        bot.reply_to(message, f"⚠ Terjadi kesalahan saat menambahkan Virtual Host: {e}")
 
 
 
