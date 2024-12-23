@@ -13,7 +13,7 @@ API_URL = "http://ip-api.com/json/?fields=country"  # API untuk geolokasi berdas
 CHAT_ID = "1061302127"  # Ganti sama chat id tele kalian
 TOKEN = "8170415782:AAGSWU5EwE1cdXHJO6LBVIqvHU9TNMoIPJk" # Ganti sama token kalian
 CPU_THRESHOLD = 10.0
-RAM_THRESHOLD = 10.0
+RAM_THRESHOLD = 25.0
 ROOT_OPTIONS = {
     "1": "/var/www/html/portfolio-tridarma",
     "2": "/var/www/html/mjs-grafik-server",
@@ -130,15 +130,25 @@ cpu_alert_sent = False
 ram_alert_sent = False
 
 def monitor_resources():
+    status_cpu = False
+    status_ram = False
     while True:
         cpu_usage = psutil.cpu_percent()
         ram_usage = psutil.virtual_memory().percent
-
-        if cpu_usage > CPU_THRESHOLD:
+        if cpu_usage > CPU_THRESHOLD and status_cpu == False:
             bot.send_message(CHAT_ID, f"⚠ Warning! CPU usage is high: {cpu_usage}%")
+            status_cpu = True
+        elif cpu_usage < CPU_THRESHOLD and status_cpu == True:
+            bot.send_message(CHAT_ID, f"⚠ SAFE! CPU usage is normal: {cpu_usage}%")
+            status_cpu = False
+            
 
-        if ram_usage > RAM_THRESHOLD:
+        if ram_usage > RAM_THRESHOLD and status_ram == False:
             bot.send_message(CHAT_ID, f"⚠ Warning! RAM usage is high: {ram_usage}%")
+            status_ram = True
+        elif ram_usage < RAM_THRESHOLD and status_ram == True:
+            bot.send_message(CHAT_ID, f"⚠ SAFE! RAM usage is normal: {ram_usage}%")
+            status_ram = False
 
         time.sleep(60)
 
