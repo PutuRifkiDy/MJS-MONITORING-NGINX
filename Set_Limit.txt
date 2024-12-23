@@ -1,0 +1,85 @@
+# Langkah Langkah Tanpa Dengan Menggunakan Bot
+1. Pilih Scope: Global atau Virtual Host
+Global: Pengaturan ini berlaku untuk semua domain atau aplikasi yang dikelola oleh server Nginx.
+Virtual Host: Pengaturan ini hanya berlaku untuk satu domain atau aplikasi tertentu yang dikelola oleh Nginx.
+2. Langkah Manual untuk Konfigurasi
+a. Global Setting
+Buka File Konfigurasi Global Nginx:
+
+File biasanya terletak di /etc/nginx/nginx.conf.
+Gunakan editor teks seperti nano atau vim:
+bash
+Salin kode
+sudo nano /etc/nginx/nginx.conf
+Tambahkan atau Edit Direktif client_max_body_size:
+
+Cari blok http dalam file konfigurasi.
+Tambahkan atau ubah baris berikut:
+nginx
+Salin kode
+http {
+    ...
+    client_max_body_size 20M;  # Contoh untuk batas 20 MB
+    ...
+}
+Simpan dan Keluar:
+
+Tekan Ctrl+O untuk menyimpan dan Ctrl+X untuk keluar (jika menggunakan nano).
+Validasi Konfigurasi:
+
+Pastikan tidak ada error dengan menjalankan:
+bash
+Salin kode
+sudo nginx -t
+Reload Nginx:
+
+Terapkan perubahan dengan perintah:
+bash
+Salin kode
+sudo systemctl reload nginx
+b. Virtual Host Setting
+Buka File Konfigurasi Virtual Host:
+
+File biasanya terletak di /etc/nginx/sites-available/ (atau direktori yang setara).
+Contoh untuk Virtual Host bernama example.com:
+bash
+Salin kode
+sudo nano /etc/nginx/sites-available/example.com
+Tambahkan atau Edit Direktif client_max_body_size:
+
+Cari blok server dalam file konfigurasi.
+Tambahkan atau ubah baris berikut:
+nginx
+Salin kode
+server {
+    ...
+    client_max_body_size 10M;  # Contoh untuk batas 10 MB
+    ...
+}
+Simpan dan Keluar:
+
+Tekan Ctrl+O untuk menyimpan dan Ctrl+X untuk keluar (jika menggunakan nano).
+Validasi Konfigurasi:
+
+Periksa konfigurasi Nginx:
+bash
+Salin kode
+sudo nginx -t
+Reload Nginx:
+
+Terapkan perubahan dengan perintah:
+bash
+Salin kode
+sudo systemctl reload nginx
+3. Tes Konfigurasi
+Unggah File:
+Gunakan aplikasi atau situs web Anda untuk mengunggah file dengan ukuran di bawah dan di atas batas yang ditentukan.
+Verifikasi:
+File yang ukurannya lebih kecil dari batas seharusnya berhasil diunggah.
+File yang ukurannya lebih besar akan menghasilkan error HTTP 413 Request Entity Too Large.
+4. Troubleshooting
+Jika muncul error, periksa kembali konfigurasi Anda:
+bash
+Salin kode
+sudo nginx -t
+Pastikan direktif client_max_body_size tidak tertimpa oleh konfigurasi lain.
