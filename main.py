@@ -178,6 +178,7 @@ def help_command(message):
 /disable_vhost - Menonaftikan Virtual host
 /add_vhost - Menambahkan Virtual Host
 /remove_vhost - Menghapuskan Virtual Host
+/set_upload_limit - Memberi Upload Size Limit Server Web
 
 ⚠ Pastikan bot memiliki izin sudo untuk kontrol Nginx.
 """
@@ -446,7 +447,94 @@ def process_remove_vhost(message):
     except Exception as e:
         bot.reply_to(message, f"⚠ Terjadi kesalahan saat menghapus Virtual Host: {e}")
 
+# Fungsi untuk mendapatkan daftar Virtual Host
+def list_virtual_hosts():
+    try:
+        available_path = '/etc/nginx/sites-available/'
+        vhosts = os.listdir(available_path)
+        return vhosts if vhosts else None
+    except Exception as e:
+        return None
 
+# Fungsi untuk mengubah batas ukuran upload
+def set_upload_limit(size, config_path):
+    try:
+        with open(config_path, 'r') as file:
+            lines = file.readlines()
+
+        with open(config_path, 'w') as file:
+            directive_updated = False
+            for line in lines:
+                if line.strip().startswith("client_max_body_size"):
+                    file.write(f"    client_max_body_size {size};\n")
+                    directive_updated = True
+                else:
+                    file.write(line)
+
+            if not directive_updated:  # Jika tidak ada, tambahkan
+                file.write(f"\n    client_max_body_size {size};\n")
+
+        # Restart Nginx untuk menerapkan perubahan
+        os.system("sudo systemctl restart nginx")
+        return f"✅ Batas ukuran file upload diatur ke {size} pada {config_path}!"
+    except Exception as e:
+        return f"❌ Error: {e}"
+
+# Handler Telegram untuk perintah /set_upload_limit
+@bot.message_handler(commands=['set_upload_limit'])
+def change_upload_limit(message):
+    bot.reply_to(message, "Apakah Anda ingin mengatur batas upload secara global atau untuk Virtual Host tertentu? (Ketik: `global` atau `vhost`)", parse_mode="Markdown")
+    bot.register_next_step_handler(message, process_upload_choice)
+
+# Proses input pilihan (global atau vhost)
+def process_upload_choice(message):
+    choice = message.text.strip().lower()
+    if choice == "global":
+        bot.reply_to(message, "Masukkan batas ukuran file upload (contoh: 10M untuk 10 MB):")
+        bot.register_next_step_handler(message, process_global_upload_limit)
+    elif choice == "vhost":
+        vhosts = list_virtual_hosts()
+        if vhosts:
+            vhosts_list = "\n".join([f"- {vhost}" for vhost in vhosts])
+            bot.reply_to(message, f"Virtual Host yang tersedia:\n{vhosts_list}\n\nKetik nama Virtual Host yang ingin diubah:")
+            bot.register_next_step_handler(message, process_vhost_selection)
+        else:
+            bot.reply_to(message, "❌ Tidak ada Virtual Host yang ditemukan.")
+    else:
+        bot.reply_to(message, "⚠ Pilihan tidak valid. Ketik `global` atau `vhost`.")
+
+# Proses input batas upload untuk global
+def process_global_upload_limit(message):
+    size = message.text.strip()
+    if not re.match(r"^\d+[KMG]$", size):
+        bot.reply_to(message, "⚠ Format tidak valid. Gunakan format seperti '10M', '5G', atau '512K'.")
+        return
+
+    config_path = "/etc/nginx/nginx.conf"
+    result = set_upload_limit(size, config_path)
+    bot.reply_to(message, result)
+
+# Proses input nama Virtual Host
+def process_vhost_selection(message):
+    vhost_name = message.text.strip()
+    config_path = f"/etc/nginx/sites-available/{vhost_name}"
+
+    if not os.path.exists(config_path):
+        bot.reply_to(message, f"⚠ Virtual Host `{vhost_name}` tidak ditemukan di `/etc/nginx/sites-available/`.")
+        return
+
+    bot.reply_to(message, f"Masukkan batas ukuran file upload untuk Virtual Host `{vhost_name}` (contoh: 10M):")
+    bot.register_next_step_handler(message, lambda msg: process_vhost_upload_limit(msg, config_path))
+
+# Proses input batas upload untuk Virtual Host tertentu
+def process_vhost_upload_limit(message, config_path):
+    size = message.text.strip()
+    if not re.match(r"^\d+[KMG]$", size):
+        bot.reply_to(message, "⚠ Format tidak valid. Gunakan format seperti '10M', '5G', atau '512K'.")
+        return
+
+    result = set_upload_limit(size, config_path)
+    bot.reply_to(message, result)
 
 # Perintah /uptime
 @bot.message_handler(commands=['uptime'])
