@@ -5,7 +5,6 @@ import psutil
 import time
 import threading
 import re
-import requests
 import subprocess
 
 API_URL = "http://ip-api.com/json/?fields=country"  # API untuk geolokasi berdasarkan IP pada access logs
@@ -21,6 +20,8 @@ ROOT_OPTIONS = {
     "4": "/var/www/html/portfolio-candra",
     "5": "/var/www/html/portfolio-rifki",
 }
+NGINX_LOG_FILE = "/var/log/nginx/access.log"
+
 bot = telebot.TeleBot(TOKEN)
 
 # Fungsi Cek Status Nginx
@@ -555,12 +556,49 @@ def uptime(message):
 @bot.message_handler(commands=['response_time'])
 def response_time(message):
     bot.reply_to(message, get_response_time())
+    
+# Fungsi Monitoring HTTP Response Codes
+def monitor_http_responses():
+    while True:
+        if not os.path.exists(NGINX_LOG_FILE):
+            bot.send_message(CHAT_ID, "Log file Nginx tidak ditemukan!")
+            time.sleep(60)  # Tunggu sebelum mencoba lagi
+            continue
 
+        status_count = {"2xx": 0, "4xx": 0, "5xx": 0}
+        try:
+            with open(NGINX_LOG_FILE, "r") as log_file:
+                for line in log_file:
+                    match = re.search(r'" (\d{3}) ', line)
+                    if match:
+                        status_code = match.group(1)
+                        if status_code.startswith("2"):
+                            status_count["2xx"] += 1
+                        elif status_code.startswith("4"):
+                            status_count["4xx"] += 1
+                        elif status_code.startswith("5"):
+                            status_count["5xx"] += 1
+
+            message = (
+                f"\ud83d\udcca HTTP Response Monitoring:\n"
+                f"- \u2705 2xx (Sukses): {status_count['2xx']}\n"
+                f"- \u26a0\ufe0f 4xx (Client Error): {status_count['4xx']}\n"
+                f"- \u274c 5xx (Server Error): {status_count['5xx']}\n"
+            )
+            bot.send_message(CHAT_ID, message)
+        except Exception as e:
+            bot.send_message(CHAT_ID, f"Terjadi kesalahan saat membaca log: {e}")
+        time.sleep(60)
+    
 def run_bot():
     thread = threading.Thread(target=monitor_resources)
     thread.daemon = True
     thread.start()
 
+    thread_http = threading.Thread(target=monitor_http_responses)
+    thread_http.daemon = True
+    thread_http.start()
+    
     bot.infinity_polling()
 # Start bot
 if __name__ == "__main__":
