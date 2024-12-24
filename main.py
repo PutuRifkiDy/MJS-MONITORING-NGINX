@@ -174,22 +174,23 @@ def help_command(message):
     help_text = """
 🤖 Nginx Management Bot Commands:
 
+/help - Menampilkan informasi perintah bot
 /status - Cek status Nginx (running/stopped)
 /start_nginx - Menjalankan Nginx
 /stop_nginx - Menghentikan Nginx
 /restart_nginx - Restart Nginx
 /monitor - Monitoring penggunaan resource Nginx
-/help - Menampilkan informasi perintah bot
 /nginx_logs - Menampilkan error pada server nginx
+/access_logs - Menampilkan 10 baris terakhir dari log akses Nginx
 /uptime - Menampilkan uptime server
 /response_time - Menampilkan response time server
-/access_logs - Menampilkan 10 baris terakhir dari log akses Nginx
+/add_vhost - Menambahkan Virtual Host
 /list_virtual_hosts - Menampilkan Virtual Host
 /enable_vhost - Akftikan Virtual host
 /disable_vhost - Menonaftikan Virtual host
-/add_vhost - Menambahkan Virtual Host
 /remove_vhost - Menghapuskan Virtual Host
 /set_upload_limit - Memberi Upload Size Limit Server Web
+/check_ssl - Memeriksa status sertifikat SSL/TLS dari domain tertentu. Menampilkan tanggal validitas sertifikat, waktu kedaluwarsa, dan memberikan peringatan jika sertifikat mendekati tanggal kedaluwarsa.
 
 ⚠ Pastikan bot memiliki izin sudo untuk kontrol Nginx.
 """
@@ -393,7 +394,7 @@ def process_add_vhost(message):
         config_content = f"""
 server {{
     listen 80;
-    server_name {domain}.example.com;
+    server_name {domain} www.{domain}.example.com;
 
     root {root_path};
     index index.html;
@@ -466,6 +467,67 @@ def list_virtual_hosts():
         return vhosts if vhosts else None
     except Exception as e:
         return None
+
+@bot.message_handler(commands=['check_ssl'])
+def check_ssl(message):
+    domain = message.text.strip().split(' ', 1)[-1]  # Ambil domain dari perintah
+    if not domain:
+        bot.reply_to(message, "⚠ Masukkan nama domain untuk memeriksa SSL. Contoh: /check_ssl example.com")
+        return
+
+    try:
+        # Jalankan perintah openssl untuk mendapatkan tanggal validitas SSL
+        result = subprocess.check_output(
+            f"echo | openssl s_client -connect {domain}:443 -servername {domain} 2>/dev/null | openssl x509 -noout -dates",
+            shell=True,
+            text=True
+        )
+
+        # Parsing output openssl
+        lines = result.strip().split("\n")
+        not_before = ""
+        not_after = ""
+        for line in lines:
+            if line.startswith("notBefore="):
+                not_before = line.split("notBefore=")[-1].strip()
+            elif line.startswith("notAfter="):
+                not_after = line.split("notAfter=")[-1].strip()
+
+        # Hapus "GMT" dari string sebelum parsing ke datetime
+        not_before = not_before.replace(" GMT", "")
+        not_after = not_after.replace(" GMT", "")
+
+        # Format waktu untuk parsing
+        time_format = "%b %d %H:%M:%S %Y"
+
+        # Konversi string ke objek datetime
+        from datetime import datetime
+        valid_from = datetime.strptime(not_before, time_format)
+        valid_until = datetime.strptime(not_after, time_format)
+
+        # Hitung hari tersisa sebelum kedaluwarsa
+        days_left = (valid_until - datetime.now()).days
+
+        # Format ulang output untuk pengguna
+        response = (
+            f"🔒 Status SSL untuk {domain}:\n"
+            f"✅ Berlaku dari: {valid_from.strftime('%d %b %Y %H:%M:%S')}\n"
+            f"⏳ Berlaku hingga: {valid_until.strftime('%d %b %Y %H:%M:%S')}\n"
+            f"📅 Sisa waktu sebelum kedaluwarsa: {days_left} hari\n"
+        )
+
+        # Berikan peringatan jika mendekati kedaluwarsa
+        if days_left <= 30:
+            response += "⚠ Sertifikat SSL mendekati tanggal kedaluwarsa! Segera perbarui sertifikat Anda.\n"
+
+        bot.reply_to(message, response)
+
+    except subprocess.CalledProcessError as e:
+        bot.reply_to(message, f"❌ Gagal memeriksa SSL: {e}")
+    except ValueError as e:
+        bot.reply_to(message, f"❌ Format tanggal tidak valid: {e}")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Terjadi kesalahan: {e}")
 
 # Fungsi untuk mengubah batas ukuran upload
 def set_upload_limit(size, config_path):
