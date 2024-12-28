@@ -189,8 +189,6 @@ def help_command(message):
 /enable_vhost - Akftikan Virtual host
 /disable_vhost - Menonaftikan Virtual host
 /remove_vhost - Menghapuskan Virtual Host
-/set_upload_limit - Memberi Upload Size Limit Server Web
-/check_ssl - Memeriksa status sertifikat SSL/TLS dari domain tertentu. Menampilkan tanggal validitas sertifikat, waktu kedaluwarsa, dan memberikan peringatan jika sertifikat mendekati tanggal kedaluwarsa.
 
 ⚠ Pastikan bot memiliki izin sudo untuk kontrol Nginx.
 """
@@ -377,6 +375,7 @@ def process_add_vhost(message):
             return
 
         available_path = f"/etc/nginx/sites-available/{domain}"
+        config_path = f"/etc/nginx/conf.d/{domain}.conf"
         root_path = f"/var/www/{domain}"
 
         # Periksa apakah file Virtual Host sudah ada
@@ -394,7 +393,7 @@ def process_add_vhost(message):
         config_content = f"""
 server {{
     listen 80;
-    server_name {domain} www.{domain}.example.com;
+    server_name {domain} {domain}.example.com;
 
     root {root_path};
     index index.html;
@@ -406,6 +405,9 @@ server {{
 """
         # Tulis file konfigurasi ke sites-available
         with open(available_path, 'w') as config_file:
+            config_file.write(config_content)
+
+        with open(config_path, 'w') as config_file:
             config_file.write(config_content)
 
         bot.reply_to(message, f"✅ File konfigurasi untuk Virtual Host `{domain}` berhasil dibuat di `/etc/nginx/sites-available/`.")
@@ -529,29 +531,75 @@ def check_ssl(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Terjadi kesalahan: {e}")
 
-# Fungsi untuk mengubah batas ukuran upload
-def set_upload_limit(size, config_path):
+# Fungsi untuk memvalidasi file konfigurasi Nginx
+def validate_nginx_config():
+    result = os.system("sudo nginx -t")
+    return result == 0
+
+def set_upload_limit(size, config_path, is_global=False):
     try:
         with open(config_path, 'r') as file:
             lines = file.readlines()
 
-        with open(config_path, 'w') as file:
-            directive_updated = False
-            for line in lines:
-                if line.strip().startswith("client_max_body_size"):
-                    file.write(f"    client_max_body_size {size};\n")
+        # Flag untuk mengecek apakah directive sudah ada
+        directive_updated = False
+        updated_lines = []
+        inside_block = False
+        inside_location_block = False
+        block_type = "http" if is_global else "server"
+
+        for line in lines:
+            stripped_line = line.strip()
+
+            # Deteksi awal blok http { atau server {
+            if stripped_line.startswith(f"{block_type} {{"):
+                inside_block = True
+                updated_lines.append(line)
+                continue
+
+            # Deteksi awal blok location { (hindari penulisan di dalam blok location)
+            if inside_block and stripped_line.startswith("location"):
+                inside_location_block = True
+
+            # Deteksi akhir blok location { (keluar dari blok location)
+            if inside_location_block and stripped_line == "}":
+                inside_location_block = False
+
+            # Deteksi akhir blok http { atau server {
+            if inside_block and stripped_line == "}":
+                if not inside_location_block and not directive_updated:  
+                    # Tambahkan directive sebelum penutup blok server/http
+                    updated_lines.append(f"    client_max_body_size {size};\n")
                     directive_updated = True
-                else:
-                    file.write(line)
+                inside_block = False
 
-            if not directive_updated:  # Jika tidak ada, tambahkan
-                file.write(f"\n    client_max_body_size {size};\n")
+            # Jika berada di dalam blok server/http tetapi bukan di dalam blok location
+            if inside_block and not inside_location_block:
+                if stripped_line.startswith("client_max_body_size"):
+                    # Perbarui directive yang sudah ada
+                    updated_lines.append(f"    client_max_body_size {size};\n")
+                    directive_updated = True
+                    continue
 
-        # Restart Nginx untuk menerapkan perubahan
-        os.system("sudo systemctl restart nginx")
+            updated_lines.append(line)
+
+        # Jika directive belum ditemukan, tambahkan ke akhir blok http { atau server {
+        if not directive_updated and is_global:
+            updated_lines.append(f"\nhttp {{\n    client_max_body_size {size};\n}}\n")
+
+        with open(config_path, 'w') as file:
+            file.writelines(updated_lines)
+
+        # Validasi konfigurasi Nginx
+        if not validate_nginx_config():
+            return "❌ Konfigurasi tidak valid. Periksa file konfigurasi Anda dengan `nginx -t`."
+
+        # Reload Nginx untuk menerapkan perubahan
+        os.system("sudo systemctl reload nginx")
         return f"✅ Batas ukuran file upload diatur ke {size} pada {config_path}!"
     except Exception as e:
         return f"❌ Error: {e}"
+
 
 # Handler Telegram untuk perintah /set_upload_limit
 @bot.message_handler(commands=['set_upload_limit'])
@@ -584,7 +632,7 @@ def process_global_upload_limit(message):
         return
 
     config_path = "/etc/nginx/nginx.conf"
-    result = set_upload_limit(size, config_path)
+    result = set_upload_limit(size, config_path, is_global=True)
     bot.reply_to(message, result)
 
 # Proses input nama Virtual Host
@@ -606,7 +654,7 @@ def process_vhost_upload_limit(message, config_path):
         bot.reply_to(message, "⚠ Format tidak valid. Gunakan format seperti '10M', '5G', atau '512K'.")
         return
 
-    result = set_upload_limit(size, config_path)
+    result = set_upload_limit(size, config_path, is_global=False)
     bot.reply_to(message, result)
 
 # Perintah /uptime
