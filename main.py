@@ -189,6 +189,7 @@ def help_command(message):
 /enable_vhost - Akftikan Virtual host
 /disable_vhost - Menonaftikan Virtual host
 /remove_vhost - Menghapuskan Virtual Host
+/set_upload_limit - Memberi Upload Size Limit Server Web
 
 ⚠ Pastikan bot memiliki izin sudo untuk kontrol Nginx.
 """
