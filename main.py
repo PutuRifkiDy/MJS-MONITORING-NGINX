@@ -9,8 +9,8 @@ import subprocess
 
 API_URL = "http://ip-api.com/json/?fields=country"  # API untuk geolokasi berdasarkan IP pada access logs
 
-CHAT_ID = "1061302127"  # Ganti sama chat id tele kalian
-TOKEN = "8170415782:AAGSWU5EwE1cdXHJO6LBVIqvHU9TNMoIPJk" # Ganti sama token kalian
+CHAT_ID = "7943369295"  # Ganti sama chat id tele kalian
+TOKEN = "7736728064:AAEkLMBn4jqPC5EIoyyp_gLuAEznMZrz36U" # Ganti sama token kalian
 CPU_THRESHOLD = 10.0
 RAM_THRESHOLD = 25.0
 ROOT_OPTIONS = {
@@ -532,73 +532,79 @@ def check_ssl(message):
         bot.reply_to(message, f"❌ Terjadi kesalahan: {e}")
 
 # Fungsi untuk memvalidasi file konfigurasi Nginx
-def validate_nginx_config():
-    result = os.system("sudo nginx -t")
-    return result == 0
+import os
 
-def set_upload_limit(size, config_path, is_global=False):
+def validate_nginx_config():
+    """
+    Memvalidasi konfigurasi Nginx menggunakan perintah `nginx -t`.
+    """
     try:
-        with open(config_path, 'r') as file:
+        result = os.system("sudo nginx -t")
+        return result == 0
+    except Exception as e:
+        return False
+def reload_nginx():
+    """
+    Reload konfigurasi Nginx.
+    """
+    try:
+        os.system("sudo systemctl reload nginx")
+        return "✅ Nginx berhasil di-reload."
+    except Exception as e:
+        return f"❌ Gagal me-reload Nginx: {e}"
+    
+def set_upload_limit(size, config_path, is_global=False):
+    """
+    Mengatur batas ukuran file upload di konfigurasi Nginx.
+
+    :param size: Ukuran maksimum file upload (misalnya "100M").
+    :param config_path: Path file konfigurasi Nginx.
+    :param is_global: True untuk mengatur di blok http, False untuk blok server.
+    """
+    try:
+        with open(config_path, "r") as file:
             lines = file.readlines()
 
-        # Flag untuk mengecek apakah directive sudah ada
-        directive_updated = False
         updated_lines = []
-        inside_block = False
-        inside_location_block = False
+        inside_target_block = False  # Mengontrol apakah berada dalam blok target (http/server)
+        directive_set = False  # Menandai apakah client_max_body_size sudah ditambahkan
         block_type = "http" if is_global else "server"
 
         for line in lines:
             stripped_line = line.strip()
 
-            # Deteksi awal blok http { atau server {
+            # Deteksi awal blok target (http { atau server {)
             if stripped_line.startswith(f"{block_type} {{"):
-                inside_block = True
+                inside_target_block = True
                 updated_lines.append(line)
+                updated_lines.append(f"    client_max_body_size {size};\n")  # Tambahkan directive
+                directive_set = True
                 continue
 
-            # Deteksi awal blok location { (hindari penulisan di dalam blok location)
-            if inside_block and stripped_line.startswith("location"):
-                inside_location_block = True
-
-            # Deteksi akhir blok location { (keluar dari blok location)
-            if inside_location_block and stripped_line == "}":
-                inside_location_block = False
-
-            # Deteksi akhir blok http { atau server {
-            if inside_block and stripped_line == "}":
-                if not inside_location_block and not directive_updated:  
-                    # Tambahkan directive sebelum penutup blok server/http
-                    updated_lines.append(f"    client_max_body_size {size};\n")
-                    directive_updated = True
-                inside_block = False
-
-            # Jika berada di dalam blok server/http tetapi bukan di dalam blok location
-            if inside_block and not inside_location_block:
-                if stripped_line.startswith("client_max_body_size"):
-                    # Perbarui directive yang sudah ada
-                    updated_lines.append(f"    client_max_body_size {size};\n")
-                    directive_updated = True
-                    continue
+            # Deteksi akhir blok target (http { atau server {)
+            if inside_target_block and stripped_line == "}":
+                inside_target_block = False
 
             updated_lines.append(line)
 
-        # Jika directive belum ditemukan, tambahkan ke akhir blok http { atau server {
-        if not directive_updated and is_global:
+        # Jika blok target tidak ditemukan dan untuk blok http, tambahkan blok baru
+        if block_type == "http" and not directive_set:
             updated_lines.append(f"\nhttp {{\n    client_max_body_size {size};\n}}\n")
 
-        with open(config_path, 'w') as file:
+        # Tulis ulang file konfigurasi
+        with open(config_path, "w") as file:
             file.writelines(updated_lines)
 
         # Validasi konfigurasi Nginx
         if not validate_nginx_config():
-            return "❌ Konfigurasi tidak valid. Periksa file konfigurasi Anda dengan `nginx -t`."
+            return "❌ Konfigurasi tidak valid. Periksa file Anda dengan `nginx -t`."
 
-        # Reload Nginx untuk menerapkan perubahan
-        os.system("sudo systemctl reload nginx")
-        return f"✅ Batas ukuran file upload diatur ke {size} pada {config_path}!"
+        # Reload Nginx
+        return reload_nginx()
+
     except Exception as e:
-        return f"❌ Error: {e}"
+        return f"❌ Terjadi kesalahan: {e}"
+
 
 
 # Handler Telegram untuk perintah /set_upload_limit
