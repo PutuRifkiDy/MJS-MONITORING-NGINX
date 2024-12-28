@@ -697,15 +697,15 @@ def monitor_http_responses():
                             status_count["5xx"] += 1
 
             message = (
-                f"\ud83d\udcca HTTP Response Monitoring:\n"
-                f"- \u2705 2xx (Sukses): {status_count['2xx']}\n"
-                f"- \u26a0\ufe0f 4xx (Client Error): {status_count['4xx']}\n"
-                f"- \u274c 5xx (Server Error): {status_count['5xx']}\n"
+                f"📊 **HTTP Response Monitoring:**\n"
+                f"- ✅ **2xx (Sukses):** {status_count['2xx']}\n"
+                f"- ⚠️ **4xx (Client Error):** {status_count['4xx']}\n"
+                f"- ❌ **5xx (Server Error):** {status_count['5xx']}\n"
             )
             bot.send_message(CHAT_ID, message)
         except Exception as e:
             bot.send_message(CHAT_ID, f"Terjadi kesalahan saat membaca log: {e}")
-        time.sleep(60)
+        time.sleep(600)
     
 def run_bot():
     thread = threading.Thread(target=monitor_resources)
