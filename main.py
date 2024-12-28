@@ -13,13 +13,8 @@ CHAT_ID = "7943369295"  # Ganti sama chat id tele kalian
 TOKEN = "7736728064:AAEkLMBn4jqPC5EIoyyp_gLuAEznMZrz36U" # Ganti sama token kalian
 CPU_THRESHOLD = 10.0
 RAM_THRESHOLD = 25.0
-ROOT_OPTIONS = {
-    "1": "/var/www/html/portfolio-tridarma",
-    "2": "/var/www/html/mjs-grafik-server",
-    "3": "/var/www/html/portfolio-devasya",
-    "4": "/var/www/html/portfolio-candra",
-    "5": "/var/www/html/portfolio-rifki",
-}
+MODULES_AVAILABLE = "/usr/lib/nginx/modules/"  # Lokasi default modul di Debian
+MODULES_ENABLED = "/etc/nginx/modules-enabled/"  # Direktori untuk tautan simbolik modul aktif
 NGINX_LOG_FILE = "/var/log/nginx/access.log"
 
 bot = telebot.TeleBot(TOKEN)
@@ -190,7 +185,10 @@ def help_command(message):
 /disable_vhost - Menonaftikan Virtual host
 /remove_vhost - Menghapuskan Virtual Host
 /set_upload_limit - Memberi Upload Size Limit Server Web
-
+/list_modules - Menampilkan daftar modul yang tersedia dan aktif.
+/enable_module <modul.so> - Mengaktifkan modul.
+/disable_module <modul.so> - Menonaktifkan modul.
+/install_module <nginx-module-name> - Menginstal modul melalui apt.
 ⚠ Pastikan bot memiliki izin sudo untuk kontrol Nginx.
 """
     try:
@@ -673,7 +671,147 @@ def uptime(message):
 @bot.message_handler(commands=['response_time'])
 def response_time(message):
     bot.reply_to(message, get_response_time())
+
+
+
+@bot.message_handler(commands=['install_module'])
+def install_module(message):
+    """
+    Menginstal modul Nginx menggunakan apt dan mengaktifkannya jika tersedia.
+    """
+
+    try:
+        # Ambil nama modul dari pesan
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "❌ Harap masukkan nama modul. Contoh: /install_module nginx-module-geoip")
+            return
+
+        module = args[1]
+
+        # Periksa apakah modul sudah diinstal
+        result = os.system(f"dpkg -l | grep -q {module}")
+        if result == 0:
+            bot.reply_to(message, f"✅ Modul {module} sudah diinstal.")
+            return
+
+        # Instal modul
+        bot.reply_to(message, f"⏳ Menginstal modul {module}...")
+        install_result = os.system(f"sudo apt install -y {module}")
+        if install_result != 0:
+            bot.reply_to(message, f"❌ Gagal menginstal modul {module}. Periksa nama paket dan koneksi internet.")
+            return
+
+        # Aktifkan modul jika tersedia di direktori modules
+        module_name = module.replace("nginx-module-", "") + ".so"
+        source = os.path.join(MODULES_AVAILABLE, module_name)
+        target = os.path.join(MODULES_ENABLED, module_name)
+
+        if os.path.exists(source):
+            # Buat tautan simbolik untuk mengaktifkan modul
+            os.symlink(source, target)
+            bot.reply_to(message, f"✅ Modul {module} berhasil diinstal dan diaktifkan!")
+        else:
+            bot.reply_to(message, f"⚠️ Modul {module} berhasil diinstal, tetapi file modul tidak ditemukan di {MODULES_AVAILABLE}.")
+
+        # Reload Nginx
+        if reload_nginx():
+            bot.reply_to(message, "✅ Nginx berhasil di-reload dengan modul baru!")
+        else:
+            bot.reply_to(message, "❌ Gagal me-reload Nginx. Periksa konfigurasi Anda.")
+
+    except Exception as e:
+        bot.reply_to(message, f"❌ Terjadi kesalahan: {e}")
     
+
+@bot.message_handler(commands=['list_modules'])
+def list_modules(message):
+    """
+    Menampilkan daftar modul yang tersedia dan aktif.
+    """
+    try:
+        available = os.listdir(MODULES_AVAILABLE) if os.path.exists(MODULES_AVAILABLE) else []
+        enabled = os.listdir(MODULES_ENABLED) if os.path.exists(MODULES_ENABLED) else []
+
+        # Escaping Markdown
+        def escape_markdown(text):
+            import re
+            return re.sub(r"([*_`\[\]])", r"\\\1", text)
+
+        # Format pesan
+        message_text = "📦 **Daftar Modul Nginx:**\n\n"
+        message_text += "**Tersedia:**\n"
+        message_text += "\n".join([f"- {escape_markdown(mod)}" for mod in available]) or "Tidak ada modul tersedia."
+        message_text += "\n\n**Aktif:**\n"
+        message_text += "\n".join([f"- {escape_markdown(mod)}" for mod in enabled]) or "Tidak ada modul aktif."
+
+        bot.reply_to(message, message_text, parse_mode="Markdown")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Terjadi kesalahan: {e}")
+
+
+@bot.message_handler(commands=['enable_module'])
+def enable_module(message):
+    """
+    Mengaktifkan modul Nginx dengan membuat tautan simbolik.
+    """
+    try:
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "❌ Harap masukkan nama modul. Contoh: /enable_module modul.so")
+            return
+
+        module = args[1]
+        source = os.path.join(MODULES_AVAILABLE, module)
+        target = os.path.join(MODULES_ENABLED, module)
+
+        # Periksa apakah modul tersedia
+        if not os.path.exists(source):
+            bot.reply_to(message, f"❌ Modul {module} tidak ditemukan di `modules-available`.")
+            return
+
+        # Periksa apakah modul sudah aktif
+        if os.path.exists(target):
+            bot.reply_to(message, f"✅ Modul {module} sudah aktif.")
+            return
+
+        # Buat tautan simbolik untuk mengaktifkan modul
+        os.symlink(source, target)
+        if reload_nginx():
+            bot.reply_to(message, f"✅ Modul {module} berhasil diaktifkan dan Nginx telah di-reload!")
+        else:
+            bot.reply_to(message, "❌ Gagal me-reload Nginx. Periksa konfigurasi Anda.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Terjadi kesalahan: {e}")
+
+@bot.message_handler(commands=['disable_module'])
+def disable_module(message):
+    """
+    Menonaktifkan modul Nginx dengan menghapus tautan simbolik.
+    """
+    try:
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "❌ Harap masukkan nama modul. Contoh: /disable_module modul.so")
+            return
+
+        module = args[1]
+        target = os.path.join(MODULES_ENABLED, module)
+
+        # Periksa apakah modul aktif
+        if not os.path.exists(target):
+            bot.reply_to(message, f"❌ Modul {module} tidak aktif.")
+            return
+
+        # Hapus tautan simbolik
+        os.unlink(target)
+        if reload_nginx():
+            bot.reply_to(message, f"✅ Modul {module} berhasil dinonaktifkan dan Nginx telah di-reload!")
+        else:
+            bot.reply_to(message, "❌ Gagal me-reload Nginx. Periksa konfigurasi Anda.")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Terjadi kesalahan: {e}")
+
 # Fungsi Monitoring HTTP Response Codes
 def monitor_http_responses():
     while True:
