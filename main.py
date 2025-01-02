@@ -9,66 +9,77 @@ import subprocess
 
 API_URL = "http://ip-api.com/json/?fields=country"  # API untuk geolokasi berdasarkan IP pada access logs
 
-CHAT_ID = "1061302127"  # Ganti sama chat id tele kalian
-TOKEN = "8170415782:AAGSWU5EwE1cdXHJO6LBVIqvHU9TNMoIPJk" # Ganti sama token kalian
+CHAT_ID = "7943369295"  # Ganti sama chat id tele kalian
+TOKEN = "7736728064:AAEkLMBn4jqPC5EIoyyp_gLuAEznMZrz36U"  # Ganti sama token kalian
 CPU_THRESHOLD = 10.0
 RAM_THRESHOLD = 25.0
 MODULES_AVAILABLE = "/usr/lib/nginx/modules/"  # Lokasi default modul di Debian
-MODULES_ENABLED = "/etc/nginx/modules-enabled/"  # Direktori untuk tautan simbolik modul aktif
+MODULES_ENABLED = (
+    "/etc/nginx/modules-enabled/"  # Direktori untuk tautan simbolik modul aktif
+)
 NGINX_LOG_FILE = "/var/log/nginx/access.log.1"
 
 bot = telebot.TeleBot(TOKEN)
+
 
 # Fungsi Cek Status Nginx
 def check_nginx_status():
     status = os.system("systemctl is-active --quiet nginx")
     return "✅ Nginx is running" if status == 0 else "❌ Nginx is stopped"
 
+
 # Fungsi Monitoring Resource Nginx
 def nginx_resources():
-    nginx_processes = [p for p in psutil.process_iter(['name']) if 'nginx' in p.info['name']]
+    nginx_processes = [
+        p for p in psutil.process_iter(["name"]) if "nginx" in p.info["name"]
+    ]
     if nginx_processes:
         total_memory = sum(p.memory_info().rss for p in nginx_processes) / (1024 * 1024)
         return f"📊 Nginx Memory Usage: {total_memory:.2f} MB"
     return "❌ Nginx is not running"
 
+
 # Perintah /status
-@bot.message_handler(commands=['status'])
+@bot.message_handler(commands=["status"])
 def status(message):
     bot.reply_to(message, check_nginx_status())
 
+
 # Perintah /start_nginx
-@bot.message_handler(commands=['start_nginx'])
+@bot.message_handler(commands=["start_nginx"])
 def start_nginx(message):
     os.system("sudo systemctl start nginx")
     bot.reply_to(message, "✅ Nginx started successfully!")
 
+
 # Perintah /stop_nginx
-@bot.message_handler(commands=['stop_nginx'])
+@bot.message_handler(commands=["stop_nginx"])
 def stop_nginx(message):
     os.system("sudo systemctl stop nginx")
     bot.reply_to(message, "🛑 Nginx stopped successfully!")
 
+
 # Perintah /restart_nginx
-@bot.message_handler(commands=['restart_nginx'])
+@bot.message_handler(commands=["restart_nginx"])
 def restart_nginx(message):
     os.system("sudo systemctl restart nginx")
     bot.reply_to(message, "🔄 Nginx restarted successfully!")
 
+
 # Perintah /nginx_logs
-@bot.message_handler(commands=['nginx_logs'])
+@bot.message_handler(commands=["nginx_logs"])
 def nginx_logs(message):
     try:
         # Mengambil 5 baris terakhir dari log nginx menggunakan tail
         command = "tail -n 5 /var/log/nginx/error.log.1"
         logs = subprocess.check_output(command, shell=True).decode("utf-8")
-        
+
         # Format log dengan emotikon untuk membuat lebih menarik
         formatted_logs = ""
         for log in logs.splitlines():
             # Mengambil informasi log sesuai pola
-            date = log.split(' ')[0] + ' ' + log.split(' ')[1]
-            message_content = log.split('] ')[1] if "]" in log else log
+            date = log.split(" ")[0] + " " + log.split(" ")[1]
+            message_content = log.split("] ")[1] if "]" in log else log
             formatted_logs += (
                 f"---------------------------------------\n"
                 f"📅 Date: {date}\n"
@@ -83,14 +94,16 @@ def nginx_logs(message):
             bot.send_message(message.chat.id, formatted_logs)
         else:
             bot.send_message(message.chat.id, "Tidak ada error yang ditemukan.")
-    
+
     except Exception as e:
-        bot.send_message(message.chat.id, f'Error membaca file log: {e}')
+        bot.send_message(message.chat.id, f"Error membaca file log: {e}")
+
 
 # Perintah /monitor
-@bot.message_handler(commands=['monitor'])
+@bot.message_handler(commands=["monitor"])
 def monitor(message):
     bot.reply_to(message, nginx_resources())
+
 
 # Fungsi untuk mengganti direktif 'root' dalam file konfigurasi
 def update_nginx_root(new_root, config_path="/etc/nginx/sites-available/default"):
@@ -113,6 +126,7 @@ def update_nginx_root(new_root, config_path="/etc/nginx/sites-available/default"
     except Exception as e:
         return f"Error: {str(e)}"
 
+
 # Fungsi untuk memproses pilihan user
 @bot.message_handler(func=lambda message: message.text.isdigit())
 def handle_option_choice(message):
@@ -124,8 +138,9 @@ def handle_option_choice(message):
     else:
         bot.reply_to(message, "❌ Invalid choice! Please select a valid option (1-5).")
 
+
 # Command utama untuk memulai perubahan root
-@bot.message_handler(commands=['change_base'])
+@bot.message_handler(commands=["change_base"])
 def change_base(message):
     option_change = """
 Pilih direktori root yang akan digunakan:
@@ -140,9 +155,11 @@ Ketik angka pilihan (1-5) untuk melanjutkan.
 """
     bot.reply_to(message, option_change)
 
+
 # Status awal kondisi (digunakan untuk menghindari spam pesan)
 cpu_alert_sent = False
 ram_alert_sent = False
+
 
 def monitor_resources():
     status_cpu = False
@@ -156,7 +173,6 @@ def monitor_resources():
         elif cpu_usage < CPU_THRESHOLD and status_cpu == True:
             bot.send_message(CHAT_ID, f"⚠ SAFE! CPU usage is normal: {cpu_usage}%")
             status_cpu = False
-            
 
         if ram_usage > RAM_THRESHOLD and status_ram == False:
             bot.send_message(CHAT_ID, f"⚠ Warning! RAM usage is high: {ram_usage}%")
@@ -167,7 +183,8 @@ def monitor_resources():
 
         time.sleep(60)
 
-@bot.message_handler(commands=['start'])
+
+@bot.message_handler(commands=["start"])
 def start_command(message):
     welcome_message = (
         "🎉 Selamat datang di Nginx Monitoring Bot! 🎉\n\n"
@@ -177,12 +194,16 @@ def start_command(message):
     )
     bot.send_message(message.chat.id, welcome_message)
 
+
 def start_monitoring():
     monitoring_thread = threading.Thread(target=monitor_resources)
-    monitoring_thread.daemon = True  # Thread akan otomatis berhenti ketika program utama berhenti
+    monitoring_thread.daemon = (
+        True  # Thread akan otomatis berhenti ketika program utama berhenti
+    )
     monitoring_thread.start()
 
-@bot.message_handler(commands=['help'])
+
+@bot.message_handler(commands=["help"])
 def help_command(message):
     print("Command /help received")  # Debugging untuk memastikan fungsi dipanggil
     help_text = """
@@ -216,14 +237,17 @@ def help_command(message):
         print(f"Error in /help command: {e}")
         bot.reply_to(message, "⚠ Terjadi kesalahan saat menampilkan /help.")
 
+
 # Path ke file access log Nginx
-ACCESS_LOG_PATH = '/var/log/nginx/access.log.1'
+ACCESS_LOG_PATH = "/var/log/nginx/access.log.1"
+
 
 # Fungsi untuk mendapatkan Uptime Server
 def get_uptime():
     # Menggunakan perintah uptime untuk mendapatkan waktu aktif server
     uptime = os.popen("uptime -p").read().strip()
     return f"🕒 Server Uptime: {uptime}"
+
 
 # Fungsi untuk mengukur Response Time
 def get_response_time():
@@ -247,34 +271,45 @@ def get_response_time():
     except requests.exceptions.RequestException as e:
         return f"❌ Gagal mengukur response time: {e}"
 
+
 # Fungsi untuk mengirimkan pesan ke Telegram
 def send_message_to_telegram(message):
     bot.send_message(CHAT_ID, message)
 
-@bot.message_handler(commands=['access_logs'])
+
+@bot.message_handler(commands=["access_logs"])
 def access_logs(message):
     try:
-        with open(ACCESS_LOG_PATH, 'r') as log_file:
+        with open(ACCESS_LOG_PATH, "r") as log_file:
             logs = log_file.readlines()[-10:]  # Ambil 10 baris terakhir
-        
+
         if not logs:
             bot.reply_to(message, "📂 Tidak ada log akses terbaru.")
             return
 
         formatted_logs = []
         for log in logs:
-            match = re.search(r'(\d+\.\d+\.\d+\.\d+) - - \[([^\]]+)\] "([^"]+)" (\d+) (\d+) "([^"]*)" "([^"]+)"', log)
+            match = re.search(
+                r'(\d+\.\d+\.\d+\.\d+) - - \[([^\]]+)\] "([^"]+)" (\d+) (\d+) "([^"]*)" "([^"]+)"',
+                log,
+            )
             if match:
-                ip, timestamp, request, status, size, referer, user_agent = match.groups()
+                ip, timestamp, request, status, size, referer, user_agent = (
+                    match.groups()
+                )
 
                 # Dapatkan lokasi negara dari API geolokasi
                 try:
-                    if ip.startswith("192.168.") or ip.startswith("10.") or ip == "127.0.0.1":
+                    if (
+                        ip.startswith("192.168.")
+                        or ip.startswith("10.")
+                        or ip == "127.0.0.1"
+                    ):
                         country = "Private Network"
                     else:
                         response = requests.get(f"{API_URL}{ip}")
                         geo_data = response.json()
-                        country = geo_data.get('country', 'Unknown')
+                        country = geo_data.get("country", "Unknown")
                 except Exception as e:
                     country = "Unknown"
 
@@ -289,18 +324,19 @@ def access_logs(message):
                 )
 
         if formatted_logs:
-            bot.send_message(message.chat.id, '\n'.join(formatted_logs))
+            bot.send_message(message.chat.id, "\n".join(formatted_logs))
         else:
             bot.reply_to(message, "⚠ Tidak ada log akses dengan format yang sesuai.")
     except Exception as e:
-        bot.reply_to(message, f'Error saat membaca log: {e}')
+        bot.reply_to(message, f"Error saat membaca log: {e}")
+
 
 # view virtual host apa aja ada yang aktif
-@bot.message_handler(commands=['list_virtual_hosts'])
+@bot.message_handler(commands=["list_virtual_hosts"])
 def virtual_hosts(message):
     try:
-        available_path = '/etc/nginx/sites-available/'
-        enabled_path = '/etc/nginx/sites-enabled/'
+        available_path = "/etc/nginx/sites-available/"
+        enabled_path = "/etc/nginx/sites-enabled/"
 
         # Ambil daftar semua Virtual Hosts yang tersedia dan aktif
         available_sites = set(os.listdir(available_path))
@@ -316,7 +352,7 @@ def virtual_hosts(message):
 
         # Kirim daftar ke user
         if status_list:
-            bot.reply_to(message, "📁 Daftar Virtual Hosts:\n" + '\n'.join(status_list))
+            bot.reply_to(message, "📁 Daftar Virtual Hosts:\n" + "\n".join(status_list))
         else:
             bot.reply_to(message, "📂 Tidak ada Virtual Hosts yang ditemukan.")
     except Exception as e:
@@ -324,13 +360,19 @@ def virtual_hosts(message):
 
 
 # Enable Virtual Host
-@bot.message_handler(commands=['enable_vhost'])
+@bot.message_handler(commands=["enable_vhost"])
 def enable_vhost(message):
     try:
-        bot.reply_to(message, "Silakan masukkan nama Virtual Host yang ingin diaktifkan (misalnya: app1):")
-        bot.register_next_step_handler(message, process_enable_vhost)  # Lanjut ke fungsi proses
+        bot.reply_to(
+            message,
+            "Silakan masukkan nama Virtual Host yang ingin diaktifkan (misalnya: app1):",
+        )
+        bot.register_next_step_handler(
+            message, process_enable_vhost
+        )  # Lanjut ke fungsi proses
     except Exception as e:
         bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}")
+
 
 def process_enable_vhost(message):
     try:
@@ -344,20 +386,30 @@ def process_enable_vhost(message):
                 os.system("sudo systemctl reload nginx")  # Reload Nginx
                 bot.reply_to(message, f"✅ Virtual Host {domain} berhasil diaktifkan!")
             else:
-                bot.reply_to(message, f"⚠ Konfigurasi Virtual Host {domain} tidak ditemukan di /etc/nginx/sites-available/.")
+                bot.reply_to(
+                    message,
+                    f"⚠ Konfigurasi Virtual Host {domain} tidak ditemukan di /etc/nginx/sites-available/.",
+                )
         else:
             bot.reply_to(message, f"⚠ Virtual Host {domain} sudah aktif.")
     except Exception as e:
         bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}")
 
+
 # Disable Virtual Host
-@bot.message_handler(commands=['disable_vhost'])
+@bot.message_handler(commands=["disable_vhost"])
 def disable_vhost(message):
     try:
-        bot.reply_to(message, "Silakan masukkan nama Virtual Host yang ingin dinonaktifkan (misalnya: app2):")
-        bot.register_next_step_handler(message, process_disable_vhost)  # Lanjut ke fungsi proses
+        bot.reply_to(
+            message,
+            "Silakan masukkan nama Virtual Host yang ingin dinonaktifkan (misalnya: app2):",
+        )
+        bot.register_next_step_handler(
+            message, process_disable_vhost
+        )  # Lanjut ke fungsi proses
     except Exception as e:
         bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}")
+
 
 def process_disable_vhost(message):
     try:
@@ -373,23 +425,33 @@ def process_disable_vhost(message):
             bot.reply_to(message, f"⚠ Virtual Host {domain} sudah tidak aktif.")
     except Exception as e:
         bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}")
- 
+
 
 # Menambahkan Virtual Host ke site-available
-@bot.message_handler(commands=['add_vhost'])
+@bot.message_handler(commands=["add_vhost"])
 def add_vhost(message):
     try:
-        bot.reply_to(message, "Silakan masukkan subdomain yang ingin ditambahkan (contoh: app1):", parse_mode="Markdown")
-        bot.register_next_step_handler(message, process_add_vhost)  # Lanjut ke proses penambahan
+        bot.reply_to(
+            message,
+            "Silakan masukkan subdomain yang ingin ditambahkan (contoh: app1):",
+            parse_mode="Markdown",
+        )
+        bot.register_next_step_handler(
+            message, process_add_vhost
+        )  # Lanjut ke proses penambahan
     except Exception as e:
         bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}")
+
 
 def process_add_vhost(message):
     try:
         # Ambil subdomain dari input user
         domain = message.text.strip()
         if not domain.isalnum():
-            bot.reply_to(message, "⚠ Subdomain hanya boleh mengandung huruf dan angka (tanpa spasi atau simbol).")
+            bot.reply_to(
+                message,
+                "⚠ Subdomain hanya boleh mengandung huruf dan angka (tanpa spasi atau simbol).",
+            )
             return
 
         available_path = f"/etc/nginx/sites-available/{domain}"
@@ -405,7 +467,9 @@ def process_add_vhost(message):
         if not os.path.exists(root_path):
             os.makedirs(root_path, exist_ok=True)  # Buat direktori root jika belum ada
             with open(f"{root_path}/index.html", "w") as index_file:
-                index_file.write(f"<h1>Welcome to {domain}.example.com</h1>")  # Buat file index default
+                index_file.write(
+                    f"<h1>Welcome to {domain}.example.com</h1>"
+                )  # Buat file index default
 
         # Template konfigurasi Nginx untuk Virtual Host
         config_content = f"""
@@ -422,34 +486,50 @@ server {{
 }}
 """
         # Tulis file konfigurasi ke sites-available
-        with open(available_path, 'w') as config_file:
+        with open(available_path, "w") as config_file:
             config_file.write(config_content)
 
-        with open(config_path, 'w') as config_file:
+        with open(config_path, "w") as config_file:
             config_file.write(config_content)
 
-        bot.reply_to(message, f"✅ File konfigurasi untuk Virtual Host {domain} berhasil dibuat di /etc/nginx/sites-available/.")
-        bot.reply_to(message, f"Apakah Anda ingin mengaktifkan Virtual Host {domain} sekarang? Gunakan perintah: enable_vhost.", parse_mode="Markdown")
+        bot.reply_to(
+            message,
+            f"✅ File konfigurasi untuk Virtual Host {domain} berhasil dibuat di /etc/nginx/sites-available/.",
+        )
+        bot.reply_to(
+            message,
+            f"Apakah Anda ingin mengaktifkan Virtual Host {domain} sekarang? Gunakan perintah: enable_vhost.",
+            parse_mode="Markdown",
+        )
 
     except Exception as e:
         bot.reply_to(message, f"⚠ Terjadi kesalahan saat menambahkan Virtual Host: {e}")
 
 
 # Hapus Virtual Host
-@bot.message_handler(commands=['remove_vhost'])
+@bot.message_handler(commands=["remove_vhost"])
 def remove_vhost(message):
     try:
-        bot.reply_to(message, "Silakan masukkan nama Virtual Host yang ingin dihapus (misalnya: app1):", parse_mode="Markdown")
-        bot.register_next_step_handler(message, process_remove_vhost)  # Lanjutkan ke proses penghapusan
+        bot.reply_to(
+            message,
+            "Silakan masukkan nama Virtual Host yang ingin dihapus (misalnya: app1):",
+            parse_mode="Markdown",
+        )
+        bot.register_next_step_handler(
+            message, process_remove_vhost
+        )  # Lanjutkan ke proses penghapusan
     except Exception as e:
         bot.reply_to(message, f"⚠ Terjadi kesalahan: {e}")
+
 
 def process_remove_vhost(message):
     try:
         # Ambil nama Virtual Host dari input user
         vhost_name = message.text.strip()
         if not vhost_name.isalnum():
-            bot.reply_to(message, "⚠ Nama Virtual Host hanya boleh mengandung huruf dan angka.")
+            bot.reply_to(
+                message, "⚠ Nama Virtual Host hanya boleh mengandung huruf dan angka."
+            )
             return
 
         available_path = f"/etc/nginx/sites-available/{vhost_name}"
@@ -457,42 +537,61 @@ def process_remove_vhost(message):
 
         # Cek apakah file Virtual Host tersedia
         if not os.path.exists(available_path):
-            bot.reply_to(message, f"⚠ File Virtual Host {vhost_name} tidak ditemukan di /etc/nginx/sites-available/.")
+            bot.reply_to(
+                message,
+                f"⚠ File Virtual Host {vhost_name} tidak ditemukan di /etc/nginx/sites-available/.",
+            )
             return
 
         # Jika Virtual Host aktif, hapus symlink dari sites-enabled
         if os.path.exists(enabled_path):
             os.unlink(enabled_path)
-            bot.reply_to(message, f"🔗 Virtual Host {vhost_name} dinonaktifkan (symlink dihapus).")
+            bot.reply_to(
+                message,
+                f"🔗 Virtual Host {vhost_name} dinonaktifkan (symlink dihapus).",
+            )
 
         # Hapus file konfigurasi di sites-available
         os.remove(available_path)
-        bot.reply_to(message, f"✅ File konfigurasi Virtual Host {vhost_name} berhasil dihapus dari /etc/nginx/sites-available/.")
+        bot.reply_to(
+            message,
+            f"✅ File konfigurasi Virtual Host {vhost_name} berhasil dihapus dari /etc/nginx/sites-available/.",
+        )
 
         # Reload Nginx untuk menerapkan perubahan
         result = os.system("sudo systemctl reload nginx")
         if result == 0:
-            bot.reply_to(message, "🔄 Nginx berhasil direload untuk menerapkan perubahan.")
+            bot.reply_to(
+                message, "🔄 Nginx berhasil direload untuk menerapkan perubahan."
+            )
         else:
-            bot.reply_to(message, "⚠ Gagal me-reload Nginx. Periksa konfigurasi Nginx secara manual.")
+            bot.reply_to(
+                message,
+                "⚠ Gagal me-reload Nginx. Periksa konfigurasi Nginx secara manual.",
+            )
 
     except Exception as e:
         bot.reply_to(message, f"⚠ Terjadi kesalahan saat menghapus Virtual Host: {e}")
 
+
 # Fungsi untuk mendapatkan daftar Virtual Host
 def list_virtual_hosts():
     try:
-        available_path = '/etc/nginx/sites-available/'
+        available_path = "/etc/nginx/sites-available/"
         vhosts = os.listdir(available_path)
         return vhosts if vhosts else None
     except Exception as e:
         return None
 
-@bot.message_handler(commands=['check_ssl'])
+
+@bot.message_handler(commands=["check_ssl"])
 def check_ssl(message):
-    domain = message.text.strip().split(' ', 1)[-1]  # Ambil domain dari perintah
+    domain = message.text.strip().split(" ", 1)[-1]  # Ambil domain dari perintah
     if not domain:
-        bot.reply_to(message, "⚠ Masukkan nama domain untuk memeriksa SSL. Contoh: /check_ssl example.com")
+        bot.reply_to(
+            message,
+            "⚠ Masukkan nama domain untuk memeriksa SSL. Contoh: /check_ssl example.com",
+        )
         return
 
     try:
@@ -500,7 +599,7 @@ def check_ssl(message):
         result = subprocess.check_output(
             f"echo | openssl s_client -connect {domain}:443 -servername {domain} 2>/dev/null | openssl x509 -noout -dates",
             shell=True,
-            text=True
+            text=True,
         )
 
         # Parsing output openssl
@@ -522,6 +621,7 @@ def check_ssl(message):
 
         # Konversi string ke objek datetime
         from datetime import datetime
+
         valid_from = datetime.strptime(not_before, time_format)
         valid_until = datetime.strptime(not_after, time_format)
 
@@ -549,8 +649,6 @@ def check_ssl(message):
     except Exception as e:
         bot.reply_to(message, f"❌ Terjadi kesalahan: {e}")
 
-# Fungsi untuk memvalidasi file konfigurasi Nginx
-import os
 
 def validate_nginx_config():
     """
@@ -561,6 +659,8 @@ def validate_nginx_config():
         return result == 0
     except Exception as e:
         return False
+
+
 def reload_nginx():
     """
     Reload konfigurasi Nginx.
@@ -570,94 +670,111 @@ def reload_nginx():
         return "✅ Nginx berhasil di-reload."
     except Exception as e:
         return f"❌ Gagal me-reload Nginx: {e}"
-    
+
+
 def set_upload_limit(size, config_path, is_global=False):
-    """
-    Mengatur batas ukuran file upload di konfigurasi Nginx.
-
-    :param size: Ukuran maksimum file upload (misalnya "100M").
-    :param config_path: Path file konfigurasi Nginx.
-    :param is_global: True untuk mengatur di blok http, False untuk blok server.
-    """
     try:
+        # Baca isi file konfigurasi
         with open(config_path, "r") as file:
-            lines = file.readlines()
+            config_content = file.readlines()
 
-        updated_lines = []
-        inside_target_block = False  # Mengontrol apakah berada dalam blok target (http/server)
-        directive_set = False  # Menandai apakah client_max_body_size sudah ditambahkan
-        block_type = "http" if is_global else "server"
+        # Cari dan ganti client_max_body_size jika sudah ada
+        directive_found = False
+        updated_content = []
+        in_server_block = is_global  # Jika is_global=True, langsung atur menjadi True
 
-        for line in lines:
-            stripped_line = line.strip()
+        for line in config_content:
+            if not is_global:
+                # Cek masuk dan keluar dari blok server
+                if re.search(r"^\s*server\s*{", line):
+                    in_server_block = True
+                elif re.search(r"^\s*}", line) and in_server_block:
+                    in_server_block = False
 
-            # Deteksi awal blok target (http { atau server {)
-            if stripped_line.startswith(f"{block_type} {{"):
-                inside_target_block = True
-                updated_lines.append(line)
-                updated_lines.append(f"    client_max_body_size {size};\n")  # Tambahkan directive
-                directive_set = True
-                continue
+            if in_server_block and re.search(
+                r"^\s*client_max_body_size\s+\d+[KMG];", line
+            ):
+                # Ganti dengan nilai baru
+                updated_content.append(f"    client_max_body_size {size};\n")
+                directive_found = True
+            else:
+                updated_content.append(line)
 
-            # Deteksi akhir blok target (http { atau server {)
-            if inside_target_block and stripped_line == "}":
-                inside_target_block = False
+        # Jika tidak ditemukan, tambahkan direktif baru
+        if not directive_found:
+            # Tentukan posisi untuk menambahkannya
+            if is_global:
+                # Tambahkan di bagian global (misalnya setelah http {)
+                for i, line in enumerate(updated_content):
+                    if line.strip() == "http {":
+                        updated_content.insert(
+                            i + 1, f"    client_max_body_size {size};\n"
+                        )
+                        break
+            else:
+                # Tambahkan di akhir blok server
+                for i in range(len(updated_content) - 1, -1, -1):
+                    if re.search(r"^\s*}", updated_content[i]):
+                        updated_content.insert(i, f"    client_max_body_size {size};\n")
+                        break
 
-            updated_lines.append(line)
-
-        # Jika blok target tidak ditemukan dan untuk blok http, tambahkan blok baru
-        if block_type == "http" and not directive_set:
-            updated_lines.append(f"\nhttp {{\n    client_max_body_size {size};\n}}\n")
-
-        # Tulis ulang file konfigurasi
+        # Tulis kembali ke file konfigurasi
         with open(config_path, "w") as file:
-            file.writelines(updated_lines)
+            file.writelines(updated_content)
 
-        # Validasi konfigurasi Nginx
-        if not validate_nginx_config():
-            return "❌ Konfigurasi tidak valid. Periksa file Anda dengan nginx -t."
-
-        # Reload Nginx
-        return reload_nginx()
-
+        return f"✅ Upload limit berhasil diatur ke {size}."
     except Exception as e:
-        return f"❌ Terjadi kesalahan: {e}"
-
+        return f"❌ Terjadi kesalahan: {str(e)}"
 
 
 # Handler Telegram untuk perintah /set_upload_limit
-@bot.message_handler(commands=['set_upload_limit'])
+@bot.message_handler(commands=["set_upload_limit"])
 def change_upload_limit(message):
-    bot.reply_to(message, "Apakah Anda ingin mengatur batas upload secara global atau untuk Virtual Host tertentu? (Ketik: global atau vhost)", parse_mode="Markdown")
+    bot.reply_to(
+        message,
+        "Apakah Anda ingin mengatur batas upload secara global atau untuk Virtual Host tertentu? (Ketik: global atau vhost)",
+        parse_mode="Markdown",
+    )
     bot.register_next_step_handler(message, process_upload_choice)
+
 
 # Proses input pilihan (global atau vhost)
 def process_upload_choice(message):
     choice = message.text.strip().lower()
     if choice == "global":
-        bot.reply_to(message, "Masukkan batas ukuran file upload (contoh: 10M untuk 10 MB):")
+        bot.reply_to(
+            message, "Masukkan batas ukuran file upload (contoh: 10M untuk 10 MB):"
+        )
         bot.register_next_step_handler(message, process_global_upload_limit)
     elif choice == "vhost":
         vhosts = list_virtual_hosts()
         if vhosts:
             vhosts_list = "\n".join([f"- {vhost}" for vhost in vhosts])
-            bot.reply_to(message, f"Virtual Host yang tersedia:\n{vhosts_list}\n\nKetik nama Virtual Host yang ingin diubah:")
+            bot.reply_to(
+                message,
+                f"Virtual Host yang tersedia:\n{vhosts_list}\n\nKetik nama Virtual Host yang ingin diubah:",
+            )
             bot.register_next_step_handler(message, process_vhost_selection)
         else:
             bot.reply_to(message, "❌ Tidak ada Virtual Host yang ditemukan.")
     else:
         bot.reply_to(message, "⚠ Pilihan tidak valid. Ketik global atau vhost.")
 
+
 # Proses input batas upload untuk global
 def process_global_upload_limit(message):
     size = message.text.strip()
     if not re.match(r"^\d+[KMG]$", size):
-        bot.reply_to(message, "⚠ Format tidak valid. Gunakan format seperti '10M', '5G', atau '512K'.")
+        bot.reply_to(
+            message,
+            "⚠ Format tidak valid. Gunakan format seperti '10M', '5G', atau '512K'.",
+        )
         return
 
     config_path = "/etc/nginx/nginx.conf"
     result = set_upload_limit(size, config_path, is_global=True)
     bot.reply_to(message, result)
+
 
 # Proses input nama Virtual Host
 def process_vhost_selection(message):
@@ -665,35 +782,48 @@ def process_vhost_selection(message):
     config_path = f"/etc/nginx/sites-available/{vhost_name}"
 
     if not os.path.exists(config_path):
-        bot.reply_to(message, f"⚠ Virtual Host {vhost_name} tidak ditemukan di /etc/nginx/sites-available/.")
+        bot.reply_to(
+            message,
+            f"⚠ Virtual Host {vhost_name} tidak ditemukan di /etc/nginx/sites-available/.",
+        )
         return
 
-    bot.reply_to(message, f"Masukkan batas ukuran file upload untuk Virtual Host {vhost_name} (contoh: 10M):")
-    bot.register_next_step_handler(message, lambda msg: process_vhost_upload_limit(msg, config_path))
+    bot.reply_to(
+        message,
+        f"Masukkan batas ukuran file upload untuk Virtual Host {vhost_name} (contoh: 10M):",
+    )
+    bot.register_next_step_handler(
+        message, lambda msg: process_vhost_upload_limit(msg, config_path)
+    )
+
 
 # Proses input batas upload untuk Virtual Host tertentu
 def process_vhost_upload_limit(message, config_path):
     size = message.text.strip()
     if not re.match(r"^\d+[KMG]$", size):
-        bot.reply_to(message, "⚠ Format tidak valid. Gunakan format seperti '10M', '5G', atau '512K'.")
+        bot.reply_to(
+            message,
+            "⚠ Format tidak valid. Gunakan format seperti '10M', '5G', atau '512K'.",
+        )
         return
 
     result = set_upload_limit(size, config_path, is_global=False)
     bot.reply_to(message, result)
 
+
 # Perintah /uptime
-@bot.message_handler(commands=['uptime'])
+@bot.message_handler(commands=["uptime"])
 def uptime(message):
     bot.reply_to(message, get_uptime())
 
+
 # Perintah /response_time
-@bot.message_handler(commands=['response_time'])
+@bot.message_handler(commands=["response_time"])
 def response_time(message):
     bot.reply_to(message, get_response_time())
 
 
-
-@bot.message_handler(commands=['install_module'])
+@bot.message_handler(commands=["install_module"])
 def install_module(message):
     """
     Menginstal modul Nginx menggunakan apt dan mengaktifkannya jika tersedia.
@@ -703,7 +833,10 @@ def install_module(message):
         # Ambil nama modul dari pesan
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "❌ Harap masukkan nama modul. Contoh: /install_module nginx-module-geoip")
+            bot.reply_to(
+                message,
+                "❌ Harap masukkan nama modul. Contoh: /install_module nginx-module-geoip",
+            )
             return
 
         module = args[1]
@@ -718,7 +851,10 @@ def install_module(message):
         bot.reply_to(message, f"⏳ Menginstal modul {module}...")
         install_result = os.system(f"sudo apt install -y {module}")
         if install_result != 0:
-            bot.reply_to(message, f"❌ Gagal menginstal modul {module}. Periksa nama paket dan koneksi internet.")
+            bot.reply_to(
+                message,
+                f"❌ Gagal menginstal modul {module}. Periksa nama paket dan koneksi internet.",
+            )
             return
 
         # Aktifkan modul jika tersedia di direktori modules
@@ -729,9 +865,14 @@ def install_module(message):
         if os.path.exists(source):
             # Buat tautan simbolik untuk mengaktifkan modul
             os.symlink(source, target)
-            bot.reply_to(message, f"✅ Modul {module} berhasil diinstal dan diaktifkan!")
+            bot.reply_to(
+                message, f"✅ Modul {module} berhasil diinstal dan diaktifkan!"
+            )
         else:
-            bot.reply_to(message, f"⚠ Modul {module} berhasil diinstal, tetapi file modul tidak ditemukan di {MODULES_AVAILABLE}.")
+            bot.reply_to(
+                message,
+                f"⚠ Modul {module} berhasil diinstal, tetapi file modul tidak ditemukan di {MODULES_AVAILABLE}.",
+            )
 
         # Reload Nginx
         if reload_nginx():
@@ -741,35 +882,44 @@ def install_module(message):
 
     except Exception as e:
         bot.reply_to(message, f"❌ Terjadi kesalahan: {e}")
-    
 
-@bot.message_handler(commands=['list_modules'])
+
+@bot.message_handler(commands=["list_modules"])
 def list_modules(message):
     """
     Menampilkan daftar modul yang tersedia dan aktif.
     """
     try:
-        available = os.listdir(MODULES_AVAILABLE) if os.path.exists(MODULES_AVAILABLE) else []
+        available = (
+            os.listdir(MODULES_AVAILABLE) if os.path.exists(MODULES_AVAILABLE) else []
+        )
         enabled = os.listdir(MODULES_ENABLED) if os.path.exists(MODULES_ENABLED) else []
 
         # Escaping Markdown
         def escape_markdown(text):
             import re
+
             return re.sub(r"([*_`\[\]])", r"\\\1", text)
 
         # Format pesan
         message_text = "📦 Daftar Modul Nginx:\n\n"
         message_text += "Tersedia:\n"
-        message_text += "\n".join([f"- {escape_markdown(mod)}" for mod in available]) or "Tidak ada modul tersedia."
+        message_text += (
+            "\n".join([f"- {escape_markdown(mod)}" for mod in available])
+            or "Tidak ada modul tersedia."
+        )
         message_text += "\n\n*Aktif:*\n"
-        message_text += "\n".join([f"- {escape_markdown(mod)}" for mod in enabled]) or "Tidak ada modul aktif."
+        message_text += (
+            "\n".join([f"- {escape_markdown(mod)}" for mod in enabled])
+            or "Tidak ada modul aktif."
+        )
 
         bot.reply_to(message, message_text, parse_mode="Markdown")
     except Exception as e:
         bot.reply_to(message, f"❌ Terjadi kesalahan: {e}")
 
 
-@bot.message_handler(commands=['enable_module'])
+@bot.message_handler(commands=["enable_module"])
 def enable_module(message):
     """
     Mengaktifkan modul Nginx dengan membuat tautan simbolik.
@@ -777,7 +927,9 @@ def enable_module(message):
     try:
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "❌ Harap masukkan nama modul. Contoh: /enable_module modul.so")
+            bot.reply_to(
+                message, "❌ Harap masukkan nama modul. Contoh: /enable_module modul.so"
+            )
             return
 
         module = args[1]
@@ -786,7 +938,9 @@ def enable_module(message):
 
         # Periksa apakah modul tersedia
         if not os.path.exists(source):
-            bot.reply_to(message, f"❌ Modul {module} tidak ditemukan di modules-available.")
+            bot.reply_to(
+                message, f"❌ Modul {module} tidak ditemukan di modules-available."
+            )
             return
 
         # Periksa apakah modul sudah aktif
@@ -797,13 +951,17 @@ def enable_module(message):
         # Buat tautan simbolik untuk mengaktifkan modul
         os.symlink(source, target)
         if reload_nginx():
-            bot.reply_to(message, f"✅ Modul {module} berhasil diaktifkan dan Nginx telah di-reload!")
+            bot.reply_to(
+                message,
+                f"✅ Modul {module} berhasil diaktifkan dan Nginx telah di-reload!",
+            )
         else:
             bot.reply_to(message, "❌ Gagal me-reload Nginx. Periksa konfigurasi Anda.")
     except Exception as e:
         bot.reply_to(message, f"❌ Terjadi kesalahan: {e}")
 
-@bot.message_handler(commands=['disable_module'])
+
+@bot.message_handler(commands=["disable_module"])
 def disable_module(message):
     """
     Menonaktifkan modul Nginx dengan menghapus tautan simbolik.
@@ -811,7 +969,10 @@ def disable_module(message):
     try:
         args = message.text.split()
         if len(args) < 2:
-            bot.reply_to(message, "❌ Harap masukkan nama modul. Contoh: /disable_module modul.so")
+            bot.reply_to(
+                message,
+                "❌ Harap masukkan nama modul. Contoh: /disable_module modul.so",
+            )
             return
 
         module = args[1]
@@ -825,11 +986,15 @@ def disable_module(message):
         # Hapus tautan simbolik
         os.unlink(target)
         if reload_nginx():
-            bot.reply_to(message, f"✅ Modul {module} berhasil dinonaktifkan dan Nginx telah di-reload!")
+            bot.reply_to(
+                message,
+                f"✅ Modul {module} berhasil dinonaktifkan dan Nginx telah di-reload!",
+            )
         else:
             bot.reply_to(message, "❌ Gagal me-reload Nginx. Periksa konfigurasi Anda.")
     except Exception as e:
         bot.reply_to(message, f"❌ Terjadi kesalahan: {e}")
+
 
 # Fungsi Monitoring HTTP Response Codes
 def monitor_http_responses():
@@ -863,7 +1028,8 @@ def monitor_http_responses():
         except Exception as e:
             bot.send_message(CHAT_ID, f"Terjadi kesalahan saat membaca log: {e}")
         time.sleep(600)
-    
+
+
 def run_bot():
     thread = threading.Thread(target=monitor_resources)
     thread.daemon = True
@@ -872,8 +1038,10 @@ def run_bot():
     thread_http = threading.Thread(target=monitor_http_responses)
     thread_http.daemon = True
     thread_http.start()
-    
+
     bot.infinity_polling()
+
+
 # Start bot
 if __name__ == "__main__":
     print("Bot is running...")
