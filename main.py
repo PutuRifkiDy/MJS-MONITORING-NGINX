@@ -15,7 +15,7 @@ CPU_THRESHOLD = 10.0
 RAM_THRESHOLD = 25.0
 MODULES_AVAILABLE = "/usr/lib/nginx/modules/"  # Lokasi default modul di Debian
 MODULES_ENABLED = "/etc/nginx/modules-enabled/"  # Direktori untuk tautan simbolik modul aktif
-NGINX_LOG_FILE = "/var/log/nginx/access.log"
+NGINX_LOG_FILE = "/var/log/nginx/access.log.1"
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -217,7 +217,7 @@ def help_command(message):
         bot.reply_to(message, "⚠ Terjadi kesalahan saat menampilkan /help.")
 
 # Path ke file access log Nginx
-ACCESS_LOG_PATH = '/var/log/nginx/access.log'
+ACCESS_LOG_PATH = '/var/log/nginx/access.log.1'
 
 # Fungsi untuk mendapatkan Uptime Server
 def get_uptime():
@@ -263,7 +263,7 @@ def access_logs(message):
 
         formatted_logs = []
         for log in logs:
-            match = re.search(r'(\d+\.\d+\.\d+\.\d+) - - \[(.?)\] "(.?)" (\d+) (\d+) "(.?)" "(.?)"', log)
+            match = re.search(r'(\d+\.\d+\.\d+\.\d+) - - \[([^\]]+)\] "([^"]+)" (\d+) (\d+) "([^"]*)" "([^"]+)"', log)
             if match:
                 ip, timestamp, request, status, size, referer, user_agent = match.groups()
 
